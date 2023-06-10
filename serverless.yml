@@ -15,6 +15,9 @@ provider:
     role:
       statements:
         - Effect: Allow
+          Action: SNS:Publish
+          Resource: !Ref QuotesMessages
+        - Effect: Allow
           Action: "s3:*"
           Resource: "*"
         - Effect: Allow
@@ -28,8 +31,10 @@ provider:
           Resource:
             - Fn::GetAtt: [ UsersTable, Arn ]
   environment:
+    SENDGRID_API_KEY: "SENDGRID API KEY"
     USERS_TABLE: ${self:custom.tableName}
     REGION: ${self:provider.region}
+    SNS_TOPIC_ARN: arn from aws sns list
 
 functions:
   quotes:
@@ -48,8 +53,49 @@ functions:
           method: post
           cors: true
 
+  staticMailer:
+    handler: handler/staticMailer.staticMailer
+    events:
+      - http:
+          path: static-mailer
+          method: post
+          cors: true
+
+  sendEmail:
+    handler: handler/sendEmail.sendEmail
+    events:
+      - http:
+          path: sendEmail
+          method: post
+          cors: true
+      - schedule: cron(0 13 * * ? *)
+
+  getSubscribers:
+    handler: handler/getSubscribers.getSubscribers
+    events:
+      - http:
+          path: getSubscribers
+          method: get
+          cors: true
+
 resources:
   Resources:
+    QuotesMessages:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: quotes-messages-${self:provider.stage}
+    QuotesMessagesSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref QuotesMessages
+        Protocol: email
+        Endpoint: "*******@gmail.com"
+        DeliveryPolicy:
+          healthyRetryPolicy:
+            numRetries: 20
+            minDelayTarget: 30
+            maxDelayTarget: 600
+            backoffFunction: exponential
     UsersTable:
       Type: AWS::DynamoDB::Table
       Properties:
